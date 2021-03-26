@@ -1,5 +1,5 @@
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Boolean, Column, Integer, String, Date, create_engine, insert
+from sqlalchemy import Boolean, Column, Integer, String, Date
 
 
 Base = declarative_base()
@@ -29,7 +29,3 @@ class Employee(Base):
 
     def __repr__(self):
         return f"<Employee(id={self.id}, first_name={self.first_name}, last_name={self.last_name})>"
-
-
-engine = create_engine("postgresql://postgres:postgres@localhost:5432/work", echo=True, future=True)
-

@@ -1,16 +1,18 @@
 from fastapi import FastAPI, Response, status
 from sqlalchemy.sql import select
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine, insert
+from sqlalchemy import create_engine
 from typing import Optional
 from datetime import datetime
 
 from database import Employee
+
 app = FastAPI()
 
-## Engine
+# Engine
 engine = create_engine("postgresql://postgres:postgres@localhost:5432/work", echo=True, future=True)
-employees = []
+
+
 # GET
 
 
@@ -34,10 +36,11 @@ async def get_employee(emp_id: int, response: Response):
         res = conn.execute(s).all()
     if not res:
         response.status_code = status.HTTP_404_NOT_FOUND
-        return "NOT FOUND"
+        return "ERROR: NOT FOUND"
     else:
         response.status_code = status.HTTP_200_OK
         return res
+
 
 # POST (CREATE empty)
 
@@ -56,7 +59,8 @@ async def create_employee(emp_id: int, response: Response):
         return "SUCCESS"
     else:
         response.status_code = status.HTTP_403_FORBIDDEN
-        return "Error: EXISTS"
+        return "ERROR: EXISTS"
+
 
 # DELETE (delete)
 
@@ -75,14 +79,15 @@ async def delete_employee(emp_id: int, response: Response):
         return "OK"
     else:
         response.status_code = status.HTTP_404_NOT_FOUND
-        return "EMPLOYEE NOT FOUND"
+        return "ERROR: EMPLOYEE NOT FOUND"
+
 
 # PATCH (fill new)
 
 
 @app.patch("/api/v1/employee/{emp_id}")
 async def modify_employee(emp_id: int, first_name: str, last_name: str, response: Response,
-                          patronymic: Optional[str] = None, corp_email: Optional[str] = "example@gmail.com",
+                          patronymic: str, corp_email: Optional[str] = "example@gmail.com",
                           personal_email: Optional[str] = "example@gmail.com",
                           phone_number: Optional[str] = "+3800000000000", country: Optional[str] = "Ukraine",
                           state: Optional[str] = None, city: Optional[str] = None, address: Optional[str] = None,
@@ -95,7 +100,7 @@ async def modify_employee(emp_id: int, first_name: str, last_name: str, response
     employee = session.query(Employee).filter_by(id=emp_id)[0]
     if not employee:
         response.status_code = status.HTTP_404_NOT_FOUND
-        return "EMPLOYEE NOT FOUND"
+        return "ERROR: EMPLOYEE NOT FOUND"
     if not employee.first_name and not employee.last_name:
         employee.first_name = first_name
         employee.last_name = last_name
@@ -121,27 +126,28 @@ async def modify_employee(emp_id: int, first_name: str, last_name: str, response
 
     else:
         response.status_code = status.HTTP_403_FORBIDDEN
-        return "EMPLOYEE NOT EMPTY"
+        return "ERROR: EMPLOYEE NOT EMPTY"
+
 
 # PUT (replace)
 
 
 @app.put("/api/v1/employee/{emp_id}")
 async def replace_employee(emp_id: int, first_name: str, last_name: str, response: Response,
-                          patronymic: Optional[str] = None, corp_email: Optional[str] = "example@gmail.com",
-                          personal_email: Optional[str] = "example@gmail.com",
-                          phone_number: Optional[str] = "+3800000000000", country: Optional[str] = "Ukraine",
-                          state: Optional[str] = None, city: Optional[str] = None, address: Optional[str] = None,
-                          postcode: Optional[str] = None, birthday: Optional[datetime] = None,
-                          start_date: Optional[datetime] = None, end_date: Optional[datetime] = None,
-                          is_active: Optional[bool] = True, is_approved: Optional[bool] = True
-                          ):
+                           patronymic: str, corp_email: Optional[str] = "example@gmail.com",
+                           personal_email: Optional[str] = "example@gmail.com",
+                           phone_number: Optional[str] = "+3800000000000", country: Optional[str] = "Ukraine",
+                           state: Optional[str] = None, city: Optional[str] = None, address: Optional[str] = None,
+                           postcode: Optional[str] = None, birthday: Optional[datetime] = None,
+                           start_date: Optional[datetime] = None, end_date: Optional[datetime] = None,
+                           is_active: Optional[bool] = True, is_approved: Optional[bool] = True
+                           ):
     Session = sessionmaker(bind=engine)
     session = Session()
     employee = session.query(Employee).filter_by(id=emp_id)[0]
     if not employee:
         response.status_code = status.HTTP_404_NOT_FOUND
-        return "EMPLOYEE NOT FOUND"
+        return "ERROR: EMPLOYEE NOT FOUND"
     employee.first_name = first_name
     employee.last_name = last_name
     employee.patronymic = patronymic
