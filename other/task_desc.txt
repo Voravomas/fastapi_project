@@ -1,0 +1,16 @@
++1) Візьми FastAPI, SQL Alchemy, Alembic
+
++2) Зроби CRUD (Create Read Update Delete) endpoint на FastAPI
+для ресурса Employee (дефініцію дам далі)
+має бути GET POST PUT PATCH DELETE для ресурсу /api/v1/employees
+
++3) Модель на SQLAlchemy
+
+-4) Валідації на Pydantic (залежніть в FastAPI є в туторіалі) (для email наприклад треба валідації)
+
++5) Міграція для бази для таблиці employees на alembic
+
+-6) Тестуй через OpenAPI/Swagger (fastapi автоматично генерує документації API
+https://fastapi.tiangolo.com/tutorial/metadata/)
+
++7) Тестуй через Postman
