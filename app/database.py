@@ -1,11 +1,31 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Boolean, Column, Integer, String, Date
 
-
+# creating base
 Base = declarative_base()
 
 
 class Employee(Base):
+    """
+    Class Employee from sqlalchemy declarative_base
+    :param emp_id:  id of employee int
+    :param first_name: first name of employee str
+    :param last_name: last name of employee str
+    :param patronymic: patronymic of employee str
+    :param corp_email: corporate email of employee str
+    :param personal_email: private email of employee str
+    :param phone_number: phone number of employee str
+    :param country: country of employee str
+    :param state: state of employee str
+    :param city: city of employee str
+    :param address: address  of employee
+    :param postcode: postcode of employee str
+    :param birthday: birthday of employee DATETIME
+    :param start_date: start date of employee DATETIME
+    :param end_date: end date of employee DATETIME
+    :param is_active: is active employee bool
+    :param is_approved: is approved employee bool
+    """
     __tablename__ = "employees"
 
     id = Column(Integer, primary_key=True)
