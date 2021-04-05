@@ -1,2 +1,5 @@
 .idea/
 __pycache__/
+app/delete2.py
+app/keys.py
+
