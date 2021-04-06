@@ -6,11 +6,20 @@ from typing import Optional
 from datetime import datetime
 
 from database import Employee
+from os import getenv
+
 
 app = FastAPI()
 
+def get_path():
+	return "postgresql://{}:{}@{}/{}".format(os.getenv('PSQL_LOG'),\
+						os.getenv('PSQL_PASS'),\
+						os.getenv('PSQL_URL'),\
+						os.getenv('PSQL_DB_NAME'))
+
 # Engine
-engine = create_engine("postgresql://postgres:postgres@localhost:5432/work", echo=True, future=True)
+db_path = get_path()
+engine = create_engine(db_path, echo=True, future=True)
 
 
 @app.get("/")
