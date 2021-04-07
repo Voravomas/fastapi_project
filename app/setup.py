@@ -1,4 +1,5 @@
 from alembic.config import Config
+from os import getenv
 
 
 def get_path():
