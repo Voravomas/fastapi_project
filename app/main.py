@@ -15,7 +15,7 @@ def get_path():
                                                 getenv('PSQL_PASS'),\
                                                 getenv('PSQL_URL'),\
                                                 getenv('PSQL_DB_NAME'),\ 
-                                                getenv('PSQL_UNIX_HOST'))
+                                                getenv('PSQL_UNIX_SOCKET'))
 
 
 
