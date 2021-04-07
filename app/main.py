@@ -8,14 +8,16 @@ from datetime import datetime
 from database import Employee
 from os import getenv
 
-
 app = FastAPI()
 
 def get_path():
-	return "postgresql://{}:{}@{}/{}".format(getenv('PSQL_LOG'),\
-						getenv('PSQL_PASS'),\
-						getenv('PSQL_URL'),\
-						getenv('PSQL_DB_NAME'))
+        return "postgresql://{}:{}@{}/{}?host={}".format(getenv('PSQL_LOG'),\
+                                                getenv('PSQL_PASS'),\
+                                                getenv('PSQL_URL'),\
+                                                getenv('PSQL_DB_NAME'),\ 
+                                                getenv('PSQL_UNIX_HOST'))
+
+
 
 # Engine
 db_path = get_path()
