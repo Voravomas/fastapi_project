@@ -1,8 +1,10 @@
 #!/bin/sh
 
 # waiting for db to start
-echo "Waiting for DB to start"
-sleep 5
+until PGPASSWORD=$POSTGRES_PASSWORD psql -h $PSQL_URL -U $POSTGRES_USER -c '\q'; do
+  >&2 echo "Postgres is unavailable - sleeping"
+  sleep 1
+done
 
 # pulling any new changes
 git pull
