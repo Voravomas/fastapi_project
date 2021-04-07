@@ -12,10 +12,10 @@ from os import getenv
 app = FastAPI()
 
 def get_path():
-	return "postgresql://{}:{}@{}/{}".format(os.getenv('PSQL_LOG'),\
-						os.getenv('PSQL_PASS'),\
-						os.getenv('PSQL_URL'),\
-						os.getenv('PSQL_DB_NAME'))
+	return "postgresql://{}:{}@{}/{}".format(getenv('PSQL_LOG'),\
+						getenv('PSQL_PASS'),\
+						getenv('PSQL_URL'),\
+						getenv('PSQL_DB_NAME'))
 
 # Engine
 db_path = get_path()
