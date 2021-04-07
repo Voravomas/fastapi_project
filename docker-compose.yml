@@ -1,0 +1,29 @@
+version: '2.1'
+services:
+  playground-web-db:
+    image: postgres
+    environment:
+        POSTGRES_DB: work
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U postgres"]
+        interval: 5s
+        timeout: 5s
+        retries: 5
+  playground-web-backend:
+    image: ep_psql
+    environment:
+        PSQL_LOG: postgres
+        PSQL_PASS: postgres
+        PSQL_URL: playground-web-db:5432
+        PSQL_DB_NAME: work
+    ports:
+      - "8000:8000"
+    depends_on:
+        playground-web-db:
+            condition: service_healthy
+    links:
+      - "playground-web-db"
