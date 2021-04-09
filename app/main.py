@@ -1,26 +1,71 @@
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Response, status, Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.sql import select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from typing import Optional
-from datetime import datetime
-
-from database import Employee
 from os import getenv
+from typing import Optional
+from datetime import datetime, timedelta
+from pydantic import BaseModel
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+
+from database import Employee, User
 
 app = FastAPI()
 
-def get_path():
-        return "postgresql://{}:{}@{}/{}".format(getenv('PSQL_LOG'),\
-                                                getenv('PSQL_PASS'),\
-                                                getenv('PSQL_URL'),\
-                                                getenv('PSQL_DB_NAME'))
 
+def get_path():
+    return "postgresql://{}:{}@{}/{}".format(getenv('PSQL_LOG'),
+                                             getenv('PSQL_PASS'),
+                                             getenv('PSQL_URL'),
+                                             getenv('PSQL_DB_NAME'))
 
 
 # Engine
 db_path = get_path()
 engine = create_engine(db_path, echo=True, future=True)
+
+
+# user_db = dict()
+# log_dict = dict()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+SECRET_KEY = "3703ddb8e48220ba2ca5cf03f17f61685ea0fca3b0d934899048ca80eb21f129"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+fake_users_db = {
+    "johndoe": {
+        "username": "johndoe",
+        "full_name": "John Doe",
+        "email": "johndoe@example.com",
+        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+        "disabled": False,
+    }
+}
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+
+# class User(BaseModel):
+#     username: str
+#     email: Optional[str] = None
+#     full_name: Optional[str] = None
+#     disabled: Optional[bool] = None
+
+
+# class UserInDB(User):
+#     hashed_password: str
 
 
 @app.get("/")
@@ -29,6 +74,149 @@ async def root():
     Sample Get request
     """
     return {}
+
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+
+async def get_users_obj():
+    all_users = list()
+    vals = await get_users(Response())
+    for usr_vals in vals:
+        temp_usr = User()
+        temp_usr.__init_from_vals__(usr_vals)
+        all_users.append(temp_usr)
+    return all_users
+
+
+def get_user_obj(db, username: str):
+    for usr in db:
+        if usr.username == username:
+            return usr
+    return None
+
+
+def authenticate_user(db, username: str, password: str):
+    user = get_user_obj(db, username)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credential_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credential_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credential_exception
+    db = await get_users_obj()
+    print("DB IS: ", db)
+    user = get_user_obj(db, username=token_data.username)
+    if user is None:
+        raise credential_exception
+    return user
+
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Invalid user")
+    return current_user
+
+
+@app.post("/token")
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/users/me")
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    return current_user
+
+
+@app.get("/api/v1/users")
+async def get_users(response: Response):
+    with engine.connect() as conn:
+        s = select(User)
+        res = conn.execute(s)
+    response.status_code = status.HTTP_200_OK
+    return res.all()
+
+
+@app.post("/api/v1/user/{u_id}")
+async def create_user(u_id: int, username: str, password: str, response: Response):
+    with engine.connect() as conn:
+        s = select(User).where(User.id == u_id)
+        res = conn.execute(s).all()
+    if not res:
+        em1 = User(id=u_id, username=username, hashed_password=get_password_hash(password))
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        session.add(em1)
+        session.commit()
+        return "SUCCESS"
+    else:
+        response.status_code = status.HTTP_403_FORBIDDEN
+        return "ERROR: EXISTS"
+
+
+@app.put("/api/v1/user/{u_id}")
+async def replace_user(u_id: int, response: Response, username: Optional[str] = None, full_name: Optional[str] = None,
+                       password: Optional[str] = None, email: Optional[str] = None, privilege: Optional[str] = None,
+                       disabled: Optional[str] = None):
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    user = session.query(User).filter_by(id=u_id)[0]
+    if not user:
+        response.status_code = status.HTTP_404_NOT_FOUND
+        return "ERROR: USER NOT FOUND"
+    print(full_name)
+    user.username = username if username else user.username
+    user.full_name = full_name if full_name else user.full_name
+    user.hashed_password = get_password_hash(password) if password else user.hashed_password
+    user.email = email if email else user.email
+    user.disabled = disabled if disabled else user.disabled
+    user.privilege = privilege if privilege else user.privilege
+    session.add(user)
+    session.commit()
+    response.status_code = status.HTTP_200_OK
+    return "OK"
 
 
 @app.get("/api/v1/employees")

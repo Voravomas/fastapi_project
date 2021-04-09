@@ -5,6 +5,25 @@ from sqlalchemy import Boolean, Column, Integer, String, Date
 Base = declarative_base()
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+
+    username = Column(String, nullable=False)
+    full_name = Column(String, default=None)
+    email = Column(String, default=None)
+    hashed_password = Column(String, nullable=False)
+    disabled = Column(Boolean, default=False)
+    privilege = Column(Integer, default=1)   # 0-nothing, 1-read, 2-read/write,
+
+    def __repr__(self):
+        return f"<User(id={self.id}, username={self.username}, privilege={self.privilege})>"
+
+    def __init_from_vals__(self, vals):
+        self.id, self.username, self.full_name, self.email, self.hashed_password, self.disabled, self.privilege = vals
+
+
 class Employee(Base):
     """
     Class Employee from sqlalchemy declarative_base
