@@ -14,7 +14,7 @@ In order to use EmployeeProject you need:
 - curl
 
 ## Installation
-`git clone https://github.com/Voravomas/fastapi_project.git`<br/>
+`git clone https://github.com/Voravomas/fastapi_project.git` <br/>
 `git checkout test_branch`
 
 `sudo docker build -t ep_psql .`<br/>
