@@ -23,6 +23,19 @@ def get_path():
                                              getenv('PSQL_DB_NAME'))
 
 
+credential_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+invalid_role_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid role",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 # Engine
 db_path = get_path()
 engine = create_engine(db_path, echo=True, future=True)
@@ -36,16 +49,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 SECRET_KEY = "3703ddb8e48220ba2ca5cf03f17f61685ea0fca3b0d934899048ca80eb21f129"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-fake_users_db = {
-    "johndoe": {
-        "username": "johndoe",
-        "full_name": "John Doe",
-        "email": "johndoe@example.com",
-        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
-        "disabled": False,
-    }
-}
+# ACCESS_TOKEN_EXPIRE_MINUTES = 1
 
 
 class Token(BaseModel):
@@ -55,17 +59,6 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
-
-
-# class User(BaseModel):
-#     username: str
-#     email: Optional[str] = None
-#     full_name: Optional[str] = None
-#     disabled: Optional[bool] = None
-
-
-# class UserInDB(User):
-#     hashed_password: str
 
 
 @app.get("/")
@@ -121,20 +114,20 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credential_exception = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+async def get_auth(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
             raise credential_exception
-        token_data = TokenData(username=username)
     except JWTError:
         raise credential_exception
+    return payload
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    payload = await get_auth(token)
+    token_data = TokenData(username=payload.get("sub"))
     db = await get_users_obj()
     print("DB IS: ", db)
     user = get_user_obj(db, username=token_data.username)
@@ -151,7 +144,8 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
 @app.post("/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
+    db = await get_users_obj()
+    user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -160,7 +154,10 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user.username,
+              "role": user.privilege
+              },
+        expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -220,11 +217,17 @@ async def replace_user(u_id: int, response: Response, username: Optional[str] = 
 
 
 @app.get("/api/v1/employees")
-async def get_employees(response: Response):
+async def get_employees(response: Response, token: str = Depends(oauth2_scheme)):
     """
     Function that returns all employees in a db
     :return: List of <sqlalchemy.engine.row.Row'> Employee instances
     """
+    payload = await get_auth(token)
+    ACCESS_ROLE = 1
+    print(payload)
+    if payload.get("role") < ACCESS_ROLE:
+        raise invalid_role_exception
+
     with engine.connect() as conn:
         s = select(Employee)
         res = conn.execute(s)
@@ -233,16 +236,22 @@ async def get_employees(response: Response):
 
 
 @app.get("/api/v1/employee/{emp_id}")
-async def get_employee(emp_id: int, response: Response):
+async def get_employee(emp_id: int, response: Response, token: str = Depends(oauth2_scheme)):
     """
     Function that returns exact employee if found, else "ERROR: NOT FOUND" str
     :param emp_id: id of employee int
     :param response:
     :return: <class 'sqlalchemy.engine.row.Row'> Employee instance, "ERROR: NOT FOUND" str else
     """
+    payload = await get_auth(token)
+    ACCESS_ROLE = 1
+    print(payload)
+    if payload.get("role") < ACCESS_ROLE:
+        raise invalid_role_exception
+
     with engine.connect() as conn:
         s = select(Employee).where(Employee.id == emp_id)
-        res = conn.execute(s).one()
+        res = conn.execute(s).all()
     if not res:
         response.status_code = status.HTTP_404_NOT_FOUND
         return "ERROR: NOT FOUND"
@@ -252,13 +261,19 @@ async def get_employee(emp_id: int, response: Response):
 
 
 @app.post("/api/v1/employee/{emp_id}")
-async def create_employee(emp_id: int, response: Response):
+async def create_employee(emp_id: int, response: Response, token: str = Depends(oauth2_scheme)):
     """
     Function that creates general record in DB with default params with null name
     :param emp_id: id of employee int
     :param response:
     :return: "SUCCESS" str if success, or "ERROR: EXISTS" str if error
     """
+    payload = await get_auth(token)
+    ACCESS_ROLE = 2
+    print(payload)
+    if payload.get("role") < ACCESS_ROLE:
+        raise invalid_role_exception
+
     with engine.connect() as conn:
         s = select(Employee).where(Employee.id == emp_id)
         res = conn.execute(s).all()
@@ -275,13 +290,19 @@ async def create_employee(emp_id: int, response: Response):
 
 
 @app.delete("/api/v1/employee/{emp_id}")
-async def delete_employee(emp_id: int, response: Response):
+async def delete_employee(emp_id: int, response: Response, token: str = Depends(oauth2_scheme)):
     """
     Function deletes employee if it was found
     :param emp_id: id of employee int
     :param response:
     :return: "OK" str if success, "ERROR: EMPLOYEE NOT FOUND" else
     """
+    payload = await get_auth(token)
+    ACCESS_ROLE = 2
+    print(payload)
+    if payload.get("role") < ACCESS_ROLE:
+        raise invalid_role_exception
+
     with engine.connect() as conn:
         s = select(Employee).where(Employee.id == emp_id)
         res = conn.execute(s).all()
@@ -364,7 +385,8 @@ async def modify_employee(emp_id: int, first_name: str, last_name: str, response
                           state: Optional[str] = None, city: Optional[str] = None, address: Optional[str] = None,
                           postcode: Optional[str] = None, birthday: Optional[datetime] = None,
                           start_date: Optional[datetime] = None, end_date: Optional[datetime] = None,
-                          is_active: Optional[bool] = True, is_approved: Optional[bool] = True
+                          is_active: Optional[bool] = True, is_approved: Optional[bool] = True,
+                          token: str = Depends(oauth2_scheme)
                           ):
     """
     Function modifies only newly created Employees. It will not work if user already has name
@@ -389,6 +411,12 @@ async def modify_employee(emp_id: int, first_name: str, last_name: str, response
     :return: "OK" if success, "ERROR: EMPLOYEE NOT FOUND" if there is no such user,
     "ERROR: EMPLOYEE NOT EMPTY" if user object does not have default attributes
     """
+    payload = await get_auth(token)
+    ACCESS_ROLE = 2
+    print(payload)
+    if payload.get("role") < ACCESS_ROLE:
+        raise invalid_role_exception
+
     Session = sessionmaker(bind=engine)
     session = Session()
     employee = session.query(Employee).filter_by(id=emp_id)[0]
@@ -417,8 +445,8 @@ async def replace_employee(emp_id: int, first_name: str, last_name: str, respons
                            state: Optional[str] = None, city: Optional[str] = None, address: Optional[str] = None,
                            postcode: Optional[str] = None, birthday: Optional[datetime] = None,
                            start_date: Optional[datetime] = None, end_date: Optional[datetime] = None,
-                           is_active: Optional[bool] = True, is_approved: Optional[bool] = True
-                           ):
+                           is_active: Optional[bool] = True, is_approved: Optional[bool] = True,
+                           token: str = Depends(oauth2_scheme)):
     """
         Function that modifies any user
     :param emp_id:  id of employee int
@@ -441,6 +469,12 @@ async def replace_employee(emp_id: int, first_name: str, last_name: str, respons
     :param is_approved: is approved employee bool
     :return: "OK" if success, "ERROR: EMPLOYEE NOT FOUND" if there is no such user
     """
+    payload = await get_auth(token)
+    ACCESS_ROLE = 2
+    print(payload)
+    if payload.get("role") < ACCESS_ROLE:
+        raise invalid_role_exception
+
     Session = sessionmaker(bind=engine)
     session = Session()
     employee = session.query(Employee).filter_by(id=emp_id)[0]
