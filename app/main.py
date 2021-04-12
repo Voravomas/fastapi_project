@@ -121,11 +121,14 @@ async def replace_user(u_id: int, response: Response, username: Optional[str] = 
                        disabled: Optional[str] = None):
     Session = sessionmaker(bind=engine)
     session = Session()
-    user = session.query(User).filter_by(id=u_id)[0]
+    try:
+        user = session.query(User).filter_by(id=u_id)[0]
+    except IndexError:
+        response.status_code = status.HTTP_404_NOT_FOUND
+        return "ERROR: USER NOT FOUND"
     if not user:
         response.status_code = status.HTTP_404_NOT_FOUND
         return "ERROR: USER NOT FOUND"
-    print(full_name)
     user.username = username if username else user.username
     user.full_name = full_name if full_name else user.full_name
     user.hashed_password = get_password_hash(password) if password else user.hashed_password
@@ -399,7 +402,11 @@ async def replace_employee(emp_id: int, first_name: str, last_name: str, respons
 
     Session = sessionmaker(bind=engine)
     session = Session()
-    employee = session.query(Employee).filter_by(id=emp_id)[0]
+    try:
+        employee = session.query(Employee).filter_by(id=emp_id)[0]
+    except IndexError:
+        response.status_code = status.HTTP_404_NOT_FOUND
+        return "ERROR: EMPLOYEE NOT FOUND"
     if not employee:
         response.status_code = status.HTTP_404_NOT_FOUND
         return "ERROR: EMPLOYEE NOT FOUND"
