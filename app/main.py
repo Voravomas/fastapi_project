@@ -1,17 +1,17 @@
 from fastapi import FastAPI, Response, status, Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.sql import select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from os import getenv
 from typing import Optional
 from datetime import datetime, timedelta
-from pydantic import BaseModel
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 
 from database import Employee, User
+from auth import invalid_role_exception, authenticate_user, ACCESS_TOKEN_EXPIRE_MINUTES, \
+    create_access_token, get_password_hash, oauth2_scheme, get_auth, get_user_obj,\
+    credential_exception, TokenData
 
 app = FastAPI()
 
@@ -23,42 +23,9 @@ def get_path():
                                              getenv('PSQL_DB_NAME'))
 
 
-credential_exception = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-invalid_role_exception = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid role",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-
 # Engine
 db_path = get_path()
 engine = create_engine(db_path, echo=True, future=True)
-
-
-# user_db = dict()
-# log_dict = dict()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-SECRET_KEY = "3703ddb8e48220ba2ca5cf03f17f61685ea0fca3b0d934899048ca80eb21f129"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-# ACCESS_TOKEN_EXPIRE_MINUTES = 1
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-
-class TokenData(BaseModel):
-    username: Optional[str] = None
 
 
 @app.get("/")
@@ -69,14 +36,6 @@ async def root():
     return {}
 
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-
 async def get_users_obj():
     all_users = list()
     vals = await get_users(Response())
@@ -85,44 +44,6 @@ async def get_users_obj():
         temp_usr.__init_from_vals__(usr_vals)
         all_users.append(temp_usr)
     return all_users
-
-
-def get_user_obj(db, username: str):
-    for usr in db:
-        if usr.username == username:
-            return usr
-    return None
-
-
-def authenticate_user(db, username: str, password: str):
-    user = get_user_obj(db, username)
-    if not user:
-        return False
-    if not verify_password(password, user.hashed_password):
-        return False
-    return user
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-async def get_auth(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credential_exception
-    except JWTError:
-        raise credential_exception
-    return payload
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
@@ -140,6 +61,7 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
     if current_user.disabled:
         raise HTTPException(status_code=400, detail="Invalid user")
     return current_user
+
 
 
 @app.post("/token")
