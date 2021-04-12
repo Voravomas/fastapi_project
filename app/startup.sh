@@ -1,9 +1,5 @@
 #!/bin/sh
 
-# waiting for db to start
-# echo "Waiting for db to init"
-# sleep 5
-
 # pulling any new changes
 git pull
 
